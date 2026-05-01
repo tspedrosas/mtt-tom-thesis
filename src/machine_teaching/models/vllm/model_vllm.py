@@ -1,4 +1,5 @@
 #! /usr/bin/env python
+import os
 import re
 import math
 
@@ -15,11 +16,11 @@ class ModelVLLM(Model):
 	
 	def __init__(self, model_name: str, samples: Union[List[Dict], Tuple] = None, gen_model: LLM = None, expl_type: str = '', task: str = '', max_tokens: int = 10,
 	             num_beams: int = 1, num_logprobs: int = 2, use_explanations: bool = True, local_model: bool = True, use_instruct: bool = False, temperature: float = 0.0,
-				 api_key: str = 'token-MtE2024', model_url: str = "http://localhost:8000/v1"):
+				 api_key: Optional[str] = None, model_url: str = "http://127.0.0.1:8000/v1"):
 		
 		super().__init__(model_name, samples, gen_model, expl_type, task, max_tokens, num_beams, use_explanations, use_instruct)
 		self._local_model = local_model
-		self._api_key = api_key
+		self._api_key = api_key or os.getenv("VLLM_API_KEY", "local-vllm-token")
 		self._n_logprobs = num_logprobs
 		self._temperature = temperature
 		self._model_url = model_url

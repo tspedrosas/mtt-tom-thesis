@@ -16,8 +16,8 @@ from utilities.prompts import TeachingPrompts
 class TeacherModel(ModelVLLM):
 	
 	def __init__(self, model_name: str, samples: List[Dict] = None, gen_model: LLM = None, expl_type: str = '', task: str = '', max_tokens: int = 10, num_beams: int = 1,
-	             num_logprobs: int = 2, use_explanations: bool = True, local_model: bool = True, use_instruct: bool = False, temperature: float = 0.0, api_key: str = 'token-MtE2024',
-	             model_url: str = "http://localhost:8000/v1"):
+	             num_logprobs: int = 2, use_explanations: bool = True, local_model: bool = True, use_instruct: bool = False, temperature: float = 0.0, api_key: str = None,
+	             model_url: str = "http://127.0.0.1:8000/v1"):
 		
 		super().__init__(model_name, samples, gen_model, expl_type, task, max_tokens, num_beams, num_logprobs, use_explanations, local_model, use_instruct, temperature, api_key, model_url)
 	

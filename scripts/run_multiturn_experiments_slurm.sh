@@ -1,27 +1,25 @@
 #!/bin/bash
 
 #SBATCH --mail-type=BEGIN,END,FAIL         # Mail events (NONE, BEGIN, END, FAIL, ALL)
-#SBATCH --mail-user=tomas.pedrosa@tecnico.ulisboa.pt
-#SBATCH --job-name=tomas_multi_turn_explanation_exec
+#SBATCH --mail-user=your.email@example.com
+#SBATCH --job-name=mtt_tom_experiment
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --gres=gpu:2
 #SBATCH --time=3-00:00:00
 #SBATCH --mem-per-cpu=200G
-#SBATCH --qos=gpu-long
+#SBATCH --qos=gpu
 #SBATCH --output="job-%x-%j.out"
-#SBATCH --partition=a6000
+#SBATCH --partition=gpu
 
 date;hostname;pwd
 options=$(getopt -o d:,s:,t:,u:,b: -l mm-dynamic,error-prioritisation,sample-expl:,mm:,rounds:,expl:,se:,te:,ics:,lib:,key:,seed:,sgpu:,tgpu:,shost:,thost:,sport:,tport:,temp:,lp:,usage:,results:,train-samples:,samples:,remote -- "$@")
-if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
-  cache_dir="/mnt/scratch-artemis/tomaspedrosa/llms/checkpoints"
-  data_dir="/mnt/data-artemis/tomaspedrosa/llms/"
-else
-  cache_dir="./cache"
-  data_dir="./data"
-fi
+# Override these paths when running on a cluster, for example:
+#   export CLUSTER_CACHE_DIR=/path/to/model/cache
+#   export CLUSTER_DATA_DIR=/path/to/data/root
+cache_dir="${CLUSTER_CACHE_DIR:-./cache}"
+data_dir="${CLUSTER_DATA_DIR:-./data}"
 
 eval set -- "$options"
 seeds=()
@@ -118,7 +116,7 @@ if [ -z "$remote_model" ]; then
 fi
 
 if [ -z "$api_key" ]; then
-    api_key="token-a1b2c3d4"
+    api_key="${VLLM_API_KEY:-local-vllm-token}"
 fi
 
 if [ -z "$n_student_gpus" ]; then
@@ -196,17 +194,14 @@ fi
 # module load python cuda
 export LD_LIBRARY_PATH="/opt/cuda/lib64:$LD_LIBRARY_PATH"
 export PATH="/opt/cuda/bin:$PATH"
-if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
-  if [ -z "$CONDA_PREFIX_1" ] ; then
-    conda_dir="$CONDA_PREFIX"
-  else
-    conda_dir="$CONDA_PREFIX_1"
-  fi
-else
-  conda_dir="$CONDA_HOME"
+conda_dir="${CONDA_HOME:-${CONDA_PREFIX:-}}"
+if [ -z "$conda_dir" ]; then
+  echo "ERROR: set CONDA_HOME or activate conda before submitting this job."
+  exit 1
 fi
 
-source "$conda_dir"/bin/activate tese_tomas
+conda_env="${CONDA_ENV_NAME:-mtt_tom}"
+source "$conda_dir"/bin/activate "$conda_env"
 
 cd "$script_path" || exit
 cd .. || exit
@@ -274,13 +269,9 @@ else
   if [ "$lib" = "vllm" ]; then
     echo "Serving teacher model using vLLM"
     echo "Model is located at http://$teacher_host:$teacher_port/v1"
-    if [ "$HOSTNAME" = "maia" ] ; then
-      CUDA_VISIBLE_DEVICES="$teacher_gpus" vllm serve "$teacher_model" --download-dir "$cache_dir" --dtype half --api-key "$api_key" --gpu-memory-utilization "$gpu_usage" \ 
-                                  --tensor-parallel-size "$n_teacher_gpus" --host "$teacher_host" --max-model-len 4096 --max-parallel-loading-workers 1 --swap-space 2 --port "$teacher_port" --disable-log-requests &                           
-    else
-      CUDA_VISIBLE_DEVICES="$teacher_gpus" vllm serve "$teacher_model" --download-dir "$cache_dir" --dtype auto --api-key "$api_key" --gpu-memory-utilization "$gpu_usage" \
+    vllm_dtype="${VLLM_DTYPE:-auto}"
+    CUDA_VISIBLE_DEVICES="$teacher_gpus" vllm serve "$teacher_model" --download-dir "$cache_dir" --dtype "$vllm_dtype" --api-key "$api_key" --gpu-memory-utilization "$gpu_usage" \
                                   --tensor-parallel-size "$n_teacher_gpus" --host "$teacher_host" --max-model-len 4096 --max-parallel-loading-workers 1 --swap-space 2 --port "$teacher_port" --disable-log-requests &
-    fi
     teacher_id=$!
 
     # scontrol show job $SLURM_JOB_ID | egrep -i 'TRES|MinMemory|NumCPUs|QOS|Partition'
@@ -301,13 +292,9 @@ else
 
     echo "Serving student model using vLLM"
     echo "Model is located at http://$student_host:$student_port/v1"
-    if [ "$HOSTNAME" = "maia" ] ; then
-      CUDA_VISIBLE_DEVICES="$student_gpus" vllm serve "$student_model" --download-dir "$cache_dir" --dtype half --api-key "$api_key" --gpu-memory-utilization "$gpu_usage" \
+    vllm_dtype="${VLLM_DTYPE:-auto}"
+    CUDA_VISIBLE_DEVICES="$student_gpus" vllm serve "$student_model" --download-dir "$cache_dir" --dtype "$vllm_dtype" --api-key "$api_key" --gpu-memory-utilization "$gpu_usage" \
                                   --tensor-parallel-size "$n_student_gpus" --host "$student_host" --max-model-len 4096 --port "$student_port" --disable-log-requests &
-    else
-      CUDA_VISIBLE_DEVICES="$student_gpus" vllm serve "$student_model" --download-dir "$cache_dir" --dtype auto --api-key "$api_key" --gpu-memory-utilization "$gpu_usage" \
-                                  --tensor-parallel-size "$n_student_gpus" --host "$student_host"  --max-model-len 4096 --port "$student_port" --disable-log-requests &
-    fi
     student_id=$!
     sleep 5m
     # wait_ready "${student_host}:${student_port}"
