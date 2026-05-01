@@ -1,0 +1,20 @@
+{% set system_message = None %}
+{% for message in messages %}
+  {% if message['role'] == 'system' %}
+    {% set system_message = message['content'] %}
+  {% endif %}
+{% endfor %}
+
+{% set system_message = system_message or "You are a helpful assistant." %}
+
+<s>[INST] <<SYS>>
+{{ system_message }}
+<</SYS>>
+
+{% for message in messages %}
+  {% if message['role'] == 'user' %}
+{{ message['content'] }} [/INST]
+  {% elif message['role'] == 'assistant' %}
+{{ message['content'] }}</s><s>[INST]
+  {% endif %}
+{% endfor %}
